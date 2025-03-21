@@ -1,0 +1,4 @@
+id,name,email,created_at,age,salary,is_active,last_login
+1,John Doe,john@example.com,2024-03-21,30,75000.50,true,2024-03-21T10:30:15
+2,Jane Smith,jane@example.com,2024-03-21,28,82500.75,true,2024-03-21T11:45:30
+3,Bob Wilson,bob@example.com,2024-03-21,35,68000.25,false,2024-03-21T09:15:45
