@@ -61,40 +61,52 @@ syne-cli login -u <username> -p <password>
 Create a backup of a PostgreSQL database:
 ```bash
 syne-cli backup [flags] \
-    -u <username> \
-    -p <password> \
     --db-user <postgres-user> \
     --db-password <postgres-password> \
     --db-name <database-name> \
+    [--host <host>] \
+    [--port <port>] \
+    [--ssl-mode <ssl-mode>] \
     [--format <format>] \
     [--file <filename>] \
     [--compress] \
-    [--data-only]
+    [--data-only] \
+    [--schema-only] \
+    [--skip-ownership]
 ```
 
 #### Backup Flags
 - `--format, -F`: Backup format (default: "custom")
-  - `custom`: PostgreSQL custom format (most flexible)
-  - `plain`: Plain SQL script
-  - `directory`: Directory format
-  - `tar`: Tar format
-- `--file, -f`: Output file name (defaults to dbname_backup.dump)
+  - `custom` or `c`: PostgreSQL custom format (most flexible)
+  - `plain` or `p`: Plain SQL script
+  - `directory` or `d`: Directory format
+  - `tar` or `t`: Tar format
+- `--file, -f`: Output file name (defaults to dbname_backup.[ext] where ext depends on format)
 - `--compress, -Z`: Enable compression (default: true, not applicable for tar format)
 - `--data-only, -D`: Backup only data without schema
+- `--schema-only, -S`: Backup only schema without data
+- `--skip-ownership`: Skip ownership information in backup
+- `--host`: PostgreSQL host (default: "localhost")
+- `--port`: PostgreSQL port (default: "5432")
+- `--ssl-mode`: PostgreSQL SSL mode (default: "disable")
 
 ### Restore Database
 Restore a PostgreSQL database from a backup:
 ```bash
 syne-cli restore [flags] \
-    -u <username> \
-    -p <password> \
     --db-user <postgres-user> \
     --db-password <postgres-password> \
     --db-name <database-name> \
     --file <backup-file> \
+    [--host <host>] \
+    [--port <port>] \
+    [--ssl-mode <ssl-mode>] \
     [--clean] \
     [--single-transaction] \
-    [--data-only]
+    [--data-only] \
+    [--schema-only] \
+    [--disable-triggers] \
+    [--skip-ownership]
 ```
 
 #### Restore Flags
@@ -102,12 +114,18 @@ syne-cli restore [flags] \
 - `--clean, -c`: Clean (drop) database objects before recreating
 - `--single-transaction, -s`: Wrap restore operation in a single transaction
 - `--data-only, -D`: Restore only data without schema
+- `--schema-only, -S`: Restore only schema without data
+- `--disable-triggers, -T`: Disable triggers during restore
+- `--skip-ownership`: Skip ownership information during restore
+- `--host`: PostgreSQL host (default: "localhost")
+- `--port`: PostgreSQL port (default: "5432")
+- `--ssl-mode`: PostgreSQL SSL mode (default: "disable")
 
 The restore command automatically detects the backup format from the file extension:
-- `.sql`: Plain SQL script
-- `.dump`: Custom format
-- `.dir`: Directory format
-- `.tar`: Tar format
+- `.sql`: Plain SQL script (uses psql)
+- `.dump`: Custom format (uses pg_restore)
+- `.dir`: Directory format (uses pg_restore)
+- `.tar`: Tar format (uses pg_restore)
 
 ### SSH Tunneling
 Create a secure SSH tunnel to allow cloud server to connect to your local PostgreSQL instance:

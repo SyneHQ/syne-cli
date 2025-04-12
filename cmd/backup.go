@@ -22,6 +22,7 @@ var (
 	dataOnly          bool
 	singleTransaction bool
 	schemaOnly        bool
+	disableTriggers   bool
 )
 
 func init() {
@@ -91,12 +92,13 @@ Automatically detects format from file extension:
 
 	// restore command
 	restoreCmd.Flags().BoolVarP(&schemaOnly, "schema-only", "S", false, "Restore only schema (not data)")
+	restoreCmd.Flags().BoolVarP(&dataOnly, "data-only", "D", false, "Backup only data (not schema)")
+	restoreCmd.Flags().BoolVarP(&disableTriggers, "disable-triggers", "T", false, "Disable triggers during restore")
 
 	// Mark required flags
 	restoreCmd.MarkFlagRequired("db-user")
 	restoreCmd.MarkFlagRequired("db-password")
 	restoreCmd.MarkFlagRequired("db-name")
-	restoreCmd.Flags().BoolVarP(&dataOnly, "data-only", "D", false, "Backup only data (not schema)")
 	// Add commands to root
 	rootCmd.AddCommand(backupCmd)
 	rootCmd.AddCommand(restoreCmd)
@@ -247,6 +249,7 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 	dbName, _ := cmd.Flags().GetString("db-name")
 	sslMode, _ := cmd.Flags().GetString("ssl-mode")
 	skipOwnership, _ := cmd.Flags().GetBool("skip-ownership")
+	disableTriggers, _ := cmd.Flags().GetBool("disable-triggers")
 
 	singleTransaction, _ := cmd.Flags().GetBool("single-transaction")
 	schemaOnly, _ := cmd.Flags().GetBool("schema-only")
@@ -274,6 +277,7 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 			"-U", config.User,
 			"-d", config.DBName,
 			"-f", file,
+			"-v",
 		}
 
 		if singleTransaction {
@@ -290,6 +294,10 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 
 		if dataOnly {
 			cmdArgs1 = append(cmdArgs1, "--data-only")
+		}
+
+		if disableTriggers {
+			cmdArgs1 = append(cmdArgs1, "--disable-triggers")
 		}
 
 		cmd1 = exec.Command("psql", cmdArgs1...)
@@ -349,6 +357,10 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 
 		if dataOnly {
 			cmdArgs1 = append(cmdArgs1, "--data-only")
+		}
+
+		if disableTriggers {
+			cmdArgs1 = append(cmdArgs1, "--disable-triggers")
 		}
 
 		cmdArgs1 = append(cmdArgs1, file)
