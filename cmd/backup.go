@@ -21,6 +21,7 @@ var (
 	cleanFirst        bool
 	dataOnly          bool
 	singleTransaction bool
+	schemaOnly        bool
 )
 
 func init() {
@@ -59,7 +60,7 @@ Data only flag:
 
 	// Data only flag
 	backupCmd.Flags().BoolVarP(&dataOnly, "data-only", "D", false, "Backup only data (not schema)")
-
+	backupCmd.Flags().BoolVarP(&schemaOnly, "schema-only", "S", false, "Backup only schema (not data)")
 	// Restore command
 	restoreCmd := &cobra.Command{
 		Use:   "restore",
@@ -87,6 +88,9 @@ Automatically detects format from file extension:
 
 	// skip ownership flag
 	restoreCmd.Flags().Bool("skip-ownership", false, "Skip ownership of database objects")
+
+	// restore command
+	restoreCmd.Flags().BoolVarP(&schemaOnly, "schema-only", "S", false, "Restore only schema (not data)")
 
 	// Mark required flags
 	restoreCmd.MarkFlagRequired("db-user")
@@ -245,7 +249,7 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 	skipOwnership, _ := cmd.Flags().GetBool("skip-ownership")
 
 	singleTransaction, _ := cmd.Flags().GetBool("single-transaction")
-
+	schemaOnly, _ := cmd.Flags().GetBool("schema-only")
 	config := db.PostgresConfig{
 		Host:     host,
 		Port:     port,
@@ -254,6 +258,8 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 		DBName:   dbName,
 		SSLMode:  sslMode,
 	}
+
+	dataOnly, _ := cmd.Flags().GetBool("data-only")
 
 	format = detectFormat(file)
 
@@ -276,6 +282,14 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 
 		if skipOwnership {
 			cmdArgs1 = append(cmdArgs1, "--no-owner")
+		}
+
+		if schemaOnly {
+			cmdArgs1 = append(cmdArgs1, "--schema-only")
+		}
+
+		if dataOnly {
+			cmdArgs1 = append(cmdArgs1, "--data-only")
 		}
 
 		cmd1 = exec.Command("psql", cmdArgs1...)
@@ -327,6 +341,14 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 
 		if skipOwnership {
 			cmdArgs1 = append(cmdArgs1, "--no-owner")
+		}
+
+		if schemaOnly {
+			cmdArgs1 = append(cmdArgs1, "--schema-only")
+		}
+
+		if dataOnly {
+			cmdArgs1 = append(cmdArgs1, "--data-only")
 		}
 
 		cmdArgs1 = append(cmdArgs1, file)
