@@ -1,7 +1,9 @@
 package cmd
 
 import (
+	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -83,6 +85,9 @@ Automatically detects format from file extension:
 	restoreCmd.Flags().String("db-name", "", "PostgreSQL database name")
 	restoreCmd.Flags().String("ssl-mode", "disable", "PostgreSQL SSL mode")
 
+	// skip ownership flag
+	restoreCmd.Flags().Bool("skip-ownership", false, "Skip ownership of database objects")
+
 	// Mark required flags
 	restoreCmd.MarkFlagRequired("db-user")
 	restoreCmd.MarkFlagRequired("db-password")
@@ -149,6 +154,7 @@ func runBackup(cmd *cobra.Command, cmdArgs []string) error {
 	dbName, _ := cmd.Flags().GetString("db-name")
 	sslMode, _ := cmd.Flags().GetString("ssl-mode")
 	dataOnly, _ := cmd.Flags().GetBool("data-only")
+	skipOwnership, _ := cmd.Flags().GetBool("skip-ownership")
 
 	config := db.PostgresConfig{
 		Host:     host,
@@ -172,6 +178,10 @@ func runBackup(cmd *cobra.Command, cmdArgs []string) error {
 		"-F", backupFormat,
 	}
 
+	if skipOwnership {
+		cmdArgs1 = append(cmdArgs1, "--no-owner")
+	}
+
 	if dataOnly {
 		cmdArgs1 = append(cmdArgs1, "--data-only")
 	}
@@ -186,16 +196,34 @@ func runBackup(cmd *cobra.Command, cmdArgs []string) error {
 
 	cmdArgs1 = append(cmdArgs1, "-f", file)
 
-	var cmd1 *exec.Cmd
-	var output []byte
-	var err error
-
-	cmd1 = exec.Command("pg_dump", cmdArgs1...)
+	var cmd1 *exec.Cmd = exec.Command("pg_dump", cmdArgs1...)
 	cmd1.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", config.Password))
 
-	output, err = cmd1.CombinedOutput()
+	// Set up pipes for real-time output
+	stdout, err := cmd1.StdoutPipe()
 	if err != nil {
-		return fmt.Errorf("backup failed: %v\nOutput: %s", err, string(output))
+		return fmt.Errorf("error creating stdout pipe: %v", err)
+	}
+	stderr, err := cmd1.StderrPipe()
+	if err != nil {
+		return fmt.Errorf("error creating stderr pipe: %v", err)
+	}
+
+	// Start the command
+	if err := cmd1.Start(); err != nil {
+		return fmt.Errorf("error starting pg_dump: %v", err)
+	}
+
+	// Create scanner for real-time output
+	go func() {
+		scanner := bufio.NewScanner(io.MultiReader(stdout, stderr))
+		for scanner.Scan() {
+			fmt.Println(scanner.Text())
+		}
+	}()
+
+	if err := cmd1.Wait(); err != nil {
+		return fmt.Errorf("backup failed: %v", err)
 	}
 
 	fmt.Printf("Successfully backed up database %s to %s\n", config.DBName, file)
@@ -214,6 +242,7 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 	dbPass, _ := cmd.Flags().GetString("db-password")
 	dbName, _ := cmd.Flags().GetString("db-name")
 	sslMode, _ := cmd.Flags().GetString("ssl-mode")
+	skipOwnership, _ := cmd.Flags().GetBool("skip-ownership")
 
 	singleTransaction, _ := cmd.Flags().GetBool("single-transaction")
 
@@ -230,8 +259,6 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 
 	var cmd1 *exec.Cmd
 	var cmdArgs1 []string
-	var output []byte
-	var err error
 
 	// For plain SQL format, use psql
 	if format == "p" {
@@ -247,12 +274,38 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 			cmdArgs1 = append(cmdArgs1, "--single-transaction")
 		}
 
+		if skipOwnership {
+			cmdArgs1 = append(cmdArgs1, "--no-owner")
+		}
+
 		cmd1 = exec.Command("psql", cmdArgs1...)
 		cmd1.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", config.Password))
 
-		output, err = cmd1.CombinedOutput()
+		// Set up pipes for real-time output
+		stdout, err := cmd1.StdoutPipe()
 		if err != nil {
-			return fmt.Errorf("restore failed: %v\nOutput: %s", err, string(output))
+			return fmt.Errorf("error creating stdout pipe: %v", err)
+		}
+		stderr, err := cmd1.StderrPipe()
+		if err != nil {
+			return fmt.Errorf("error creating stderr pipe: %v", err)
+		}
+
+		// Start the command
+		if err := cmd1.Start(); err != nil {
+			return fmt.Errorf("error starting psql: %v", err)
+		}
+
+		// Create scanner for real-time output
+		go func() {
+			scanner := bufio.NewScanner(io.MultiReader(stdout, stderr))
+			for scanner.Scan() {
+				fmt.Println(scanner.Text())
+			}
+		}()
+
+		if err := cmd1.Wait(); err != nil {
+			return fmt.Errorf("restore failed: %v", err)
 		}
 	} else {
 		// For other formats, use pg_restore
@@ -261,6 +314,7 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 			"-p", config.Port,
 			"-U", config.User,
 			"-d", config.DBName,
+			"-v", // Add verbose flag to show progress
 		}
 
 		if cleanFirst {
@@ -271,14 +325,40 @@ func runRestore(cmd *cobra.Command, cmdArgs []string) error {
 			cmdArgs1 = append(cmdArgs1, "--single-transaction")
 		}
 
+		if skipOwnership {
+			cmdArgs1 = append(cmdArgs1, "--no-owner")
+		}
+
 		cmdArgs1 = append(cmdArgs1, file)
 
 		cmd1 = exec.Command("pg_restore", cmdArgs1...)
 		cmd1.Env = append(os.Environ(), fmt.Sprintf("PGPASSWORD=%s", config.Password))
 
-		output, err = cmd1.CombinedOutput()
+		// Set up pipes for real-time output
+		stdout, err := cmd1.StdoutPipe()
 		if err != nil {
-			return fmt.Errorf("restore failed: %v\nOutput: %s", err, string(output))
+			return fmt.Errorf("error creating stdout pipe: %v", err)
+		}
+		stderr, err := cmd1.StderrPipe()
+		if err != nil {
+			return fmt.Errorf("error creating stderr pipe: %v", err)
+		}
+
+		// Start the command
+		if err := cmd1.Start(); err != nil {
+			return fmt.Errorf("error starting pg_restore: %v", err)
+		}
+
+		// Create scanner for real-time output
+		go func() {
+			scanner := bufio.NewScanner(io.MultiReader(stdout, stderr))
+			for scanner.Scan() {
+				fmt.Println(scanner.Text())
+			}
+		}()
+
+		if err := cmd1.Wait(); err != nil {
+			return fmt.Errorf("restore failed: %v", err)
 		}
 	}
 
